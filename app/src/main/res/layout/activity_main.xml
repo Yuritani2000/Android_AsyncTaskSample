@@ -11,11 +11,25 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
 
-        <EditText
-            android:id="@+id/accessTokenEditText"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.8"/>
+            android:layout_weight="0.8"
+            android:orientation="vertical">
+
+            <EditText
+                android:id="@+id/userIdEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/hint_user_id"/>
+
+            <EditText
+                android:id="@+id/accessTokenEditText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:hint="@string/hint_access_token"/>
+
+        </LinearLayout>
 
         <Button
             android:id="@+id/sendRequestButton"
@@ -24,7 +38,13 @@
             android:text="@string/send"
             android:layout_weight="0.2"/>
 
+
     </LinearLayout>
+
+    <ListView
+        android:id="@+id/myProfileList"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"/>
 
     <ScrollView
         android:layout_width="match_parent"

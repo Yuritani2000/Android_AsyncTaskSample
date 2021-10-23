@@ -2,4 +2,6 @@
     <string name="app_name">AsyncTaskSample</string>
     <string name="send">send</string>
     <string name="dummy_text">dummyText</string>
+    <string name="hint_user_id">ユーザーID</string>
+    <string name="hint_access_token">アクセストークン</string>
 </resources>
