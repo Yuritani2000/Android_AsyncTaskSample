@@ -18,10 +18,10 @@
             android:orientation="vertical">
 
             <EditText
-                android:id="@+id/userIdEditText"
+                android:id="@+id/userNameEditText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:hint="@string/hint_user_id"/>
+                android:hint="@string/hint_user_name"/>
 
             <EditText
                 android:id="@+id/accessTokenEditText"

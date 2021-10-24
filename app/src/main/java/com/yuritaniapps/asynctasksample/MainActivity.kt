@@ -34,7 +34,7 @@ import java.util.Arrays.toString
  * 2.
  * https://codezine.jp/article/detail/13407
  * 3.
- *
+ * https://github.com/Kotlin/kotlinx.serialization/blob/master/docs/basic-serialization.md
  */
 class MainActivity : AppCompatActivity(){
 
@@ -44,61 +44,93 @@ class MainActivity : AppCompatActivity(){
 
         val accessTokenEditText = findViewById<EditText>(R.id.accessTokenEditText)
         val sendRequestButton = findViewById<Button>(R.id.sendRequestButton)
-//        val resultTextView = findViewById<TextView>(R.id.resultTextView)
-
+        val userNameEditText = findViewById<EditText>(R.id.userNameEditText)
 
         sendRequestButton.setOnClickListener { view ->
-            val accessToken = accessTokenEditText.text.toString()
 
-            val URL = "https://qiita.com/api/v2/users/Yuritani"
-            var newText = "data empty"
+            // EditTextから，入力したQiitaのユーザー名とアクセストークンを受け取って，APIを呼び出すためのViewModelに渡す．
+            val accessToken = accessTokenEditText.text.toString()
+            val userName = userNameEditText.text.toString()
+
+            /**
+             * 自分のプロフィールを表示するために使うListViewを更新するメソッド．
+             */
+            val updateMyProfileListView: (MyProfile?) -> Unit = { myProfile ->
+                // Kotlinはnull安全という機能が備わっている．
+                // その設計思想のため，nullableな型(null値がはいるのを許容する型)とnon-nullableな型(null値が入るのを許容しない型)が存在する
+                // Kotlinで用意されたメソッドでは，nullableな型を許容しないメソッドが多い．
+                // nullableな変数(変数)?.let{}とすると，{}内の処理はnullableな変数がnull出なかった時のみ実行される．
+                // この時{}内では，(変数)?.let{}とした(変数)のnullでないバージョンは，デフォルトで'it'という名前で使用することはできる．
+                myProfile?.let { it ->
+                    Log.d("debug", "received data from ViewModel: $it")
+                    val myProfileArray = arrayOf(
+                        it.description ?: "空欄",
+                        it.facebook_id ?: "空欄",
+                        it.github_login_name ?: "空欄",
+                        it.id ?: "空欄",
+                        it.linkedin_id ?: "空欄",
+                        it.location ?: "空欄",
+                        it.name ?: "空欄",
+                        it.organization ?: "空欄",
+                        it.profile_image_url ?: "空欄",
+                        it.twitter_screen_name ?: "空欄",
+                        it.website_url ?: "空欄",
+                        it.followees_count.toString(),
+                        it.followers_count.toString(),
+                        it.items_count.toString(),
+                        it.permanent_id.toString(),
+                        it.team_only.toString()
+                    )
+                    val myProfileList = findViewById<ListView>(R.id.myProfileList)
+                    val arrayAdapter = ArrayAdapter<String>(
+                        this,
+                        android.R.layout.simple_list_item_1,
+                        myProfileArray
+                    )
+                    myProfileList.adapter = arrayAdapter
+                }
+            }
 
             val myProfileRepository = MyProfileRepository()
             val profileViewModel = ProfileViewModel(myProfileRepository)
-            val myProfile = profileViewModel.getMyProfile(accessToken)
-            myProfile?.let{ it ->
-                val myProfileFields = MyProfile::class.java.declaredFields.mapNotNull { it.name }
-                myProfileFields.forEach{
-                    )
-                }
-
-                val myProfileList = findViewById<ListView>(R.id.myProfileList)
-                val arrayAdapter = ArrayAdapter<Map<String, String>>(this, myProfileMap, android.R.layout.simple_list_item_2, arrayOf(android.R.id.text1, android.R.id.text2))
-
-            }
+            profileViewModel.getMyProfile(accessToken, userName, updateMyProfileListView)
         }
 
     }
 }
 
 /**
- *
+ * MyProfileRepositoryから情報を受け取るためのViewModel. ここからUIを更新するメソッドを呼び出す．
+ * 今回は，Kotlin Coroutinesという仕組みを使って
  */
 class ProfileViewModel(private val myProfileRepository: MyProfileRepository): ViewModel(){
 
-    fun getMyProfile(accessToken: String): MyProfile?{
-        var response: MyProfile? = null
+    fun getMyProfile(accessToken: String, userName: String, updateMyProfileListView: (MyProfile?) -> Unit){
+        var myProfileResponse: MyProfile? = null
         viewModelScope.launch(Dispatchers.Main) {
             try {
                 Log.d("debug", "launch called")
                 // ここで非同期処理を呼び出す…のだが，ここはUIスレッドであるため，別のスレッドを立てて行う必要がある．
-                val httpResult = myProfileRepository.getMyProfileRequest(accessToken)
+                val httpResult = myProfileRepository.getMyProfileRequest(accessToken, userName)
                 when(httpResult) {
                     is HttpResult.Success<MyProfile> -> {
-                        response = httpResult.data
+                        myProfileResponse = httpResult.data
+                        updateMyProfileListView(myProfileResponse)
                     }
                 }
-//                Log.d("debug", "response has been returned $response")
             }catch(e: Exception){
                 // データ取得中に例外が発生した場合の処理
                 Log.e("debug", e.toString())
             }
         }
-        return response
     }
 }
 
-//RやTが何かわからない．レスポンスのモデル化とは何かわからない．data classの意味が分からない．
+/**
+ * MyProfileRepositoryのgetMyProfileRequestの返り値に使われるdata classをまとめたもの．
+ * HTTPリクエストが成功した場合は，Successのクラス，失敗した場合はErrorのクラスが買えるようになっている．
+ * RやTには，受け取ったJSONをデコードしたオブジェクトのMyProfileクラスを指定する．
+ */
 sealed class HttpResult<out R>{
     data class Success<out T>(val data: T) : HttpResult<T>()
     data class Error(val exception: Exception) : HttpResult<Nothing>()
@@ -109,16 +141,31 @@ sealed class HttpResult<out R>{
  */
 class MyProfileRepository(){
 
-    suspend fun getMyProfileRequest(accessToken: String): HttpResult<MyProfile>{
-        val URL = "https://qiita.com/api/v2/users/Yuritani"
+    /**
+     * 実際にFuelライブラリを用いてHTTPリクエストを行うメソッド．
+     */
+    suspend fun getMyProfileRequest(accessToken: String, userName: String): HttpResult<MyProfile>{
+        // Qiita APIのエンドポイントにアクセスする際に使用するURL. Qiitaのアカウントを取得しておく必要がある．
+        val URL = "https://qiita.com/api/v2/users/$userName"
+
+        Log.d("debug", "URL: $URL");
         var resultStr = "no data"
         var httpResult: HttpResult<MyProfile> = HttpResult.Error(Exception("No http request did not succeeded."))
+
+        // withContext(Dispatchers.IO){}の括弧内は，別スレッドで実行される．
+        // Androidでは，HTTPリクエストなど外部とのデータのやり取りはUIスレッド上で行ってはならず，このように別スレッドで行なわなければならない．
+        // その理由は，HTTPリクエストなど返事に時間がかかり，その間スレッドをブロックする処理は，UIスレッド上で行ってはいけないという決まりがあるからである．
         withContext(Dispatchers.IO){
             // ここに，Fuelを用いてHTTP通信を行う処理を記述する．
             Log.d("debug", "withContext called")
+
+            // String型の変数に対してhttpGetメソッドを用いることで，GETメソッドを実行することができる．
+            // この際，Qiita APIは，アカウント管理ページで作成したBearerトークンをパラメータとしてHTTPのAuthorizationヘッダに付与する必要がある．
+            // このメソッドは，スレッドをブロックする方法で書かれている(別途スレッドをブロックしない方法での書き方もFuelには用意してある).
             val (request, response, result) = URL.httpGet()
             .header(Headers.AUTHORIZATION, "Bearer $accessToken")
             .responseString()
+
             when(result){
                 is Result.Failure -> {
                     val ex = result.getException()
@@ -150,7 +197,7 @@ class MyProfileRepository(){
 @Serializable
 data class MyProfile
     (
-    @SerialName("description") val description: String,
+    @SerialName("description") val description: String?,
     @SerialName("facebook_id") val facebook_id: String?,
     @SerialName("followees_count") val followees_count: Int,
     @SerialName("followers_count") val followers_count: Int,
